@@ -161,11 +161,11 @@ for g in g_value:
 # from dos import *
 # from boson_op import*
 # w=0.2
-# data1= np.loadtxt("g_occ_docc_Z_diff_U=0.5.dat",skiprows=10, max_rows=15).T
-# data2= np.loadtxt("g_occ_docc_Z_diff_U=1.dat",skiprows=12, max_rows=15).T
-# data3= np.loadtxt("g_occ_docc_Z_diff_U=1.5.dat", skiprows=35, max_rows=15).T
-# data4= np.loadtxt("g_occ_docc_Z_diff_U=2.dat", skiprows=45, max_rows=14).T
-# data5= np.loadtxt("g_occ_docc_Z_diff_U=2.5.dat",skiprows=19, max_rows=15).T
+# data1= np.loadtxt("g_occ_docc_Z_diff_U=0.5.dat").T
+# data2= np.loadtxt("g_occ_docc_Z_diff_U=1.dat").T
+# data3= np.loadtxt("g_occ_docc_Z_diff_U=1.5.dat").T
+# data4= np.loadtxt("g_occ_docc_Z_diff_U=2.dat").T
+# data5= np.loadtxt("g_occ_docc_Z_diff_U=2.5.dat").T
 # data6=np.loadtxt("g_occ_docc_Z_diff_U=2.9.dat").T
 
 # plt.plot((data1[0]**2)*2/w, data1[4]/data1[4][0], 'b-', label='$U=0.5$')
