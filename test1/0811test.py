@@ -28,7 +28,7 @@ def get_G0_aim(omFs, V, eb, ed, mu):
         G0_aim[iomF] = 1. / (1j * omF - ed + mu - Delta)
     return G0_aim
 
-def get_G0w_aim(ws, eta, V, eb, ed, mu):
+def get_G0w_aim(ws, eta, V, eb, ed, mu):  #no U interaction(實頻)
     G0_aim = np.zeros((len(ws)), dtype=complex)
     for iw, w in enumerate(ws):
         Delta = 0.0
@@ -37,7 +37,7 @@ def get_G0w_aim(ws, eta, V, eb, ed, mu):
         G0_aim[iw] = (1. / (w + 1j * eta - ed + mu - Delta))[0]
     return G0_aim
 
-def cost_func(x, *args):
+def cost_func(x, *args):    #擬合算最小值
     omFs, ed, mu, G0, Nb, Nmax = args
     V = x[:Nb] + 1j * x[Nb:2*Nb]
     eb = x[2*Nb:3*Nb]
@@ -47,21 +47,21 @@ def cost_func(x, *args):
         diff = 1. / G0_aim[iomF] - 1. / G0[iomF]
         cost += (np.conj(diff) * diff).real / omFs[iomF]**1
     return cost
-g_value=np.arange(0.55,0.8,0.05)
+g_value = np.arange(0.0, 1.1, 0.02)[::-1]#界定g的範圍、間隔
 # initial density of state
 T = 0.005
 t = 0.5
 mu = 0.0
 Nb = 3  #bath軌道
 Nmax = 100
-mix = 0.2
+mix = 0.2 #調0.1比較好收斂 #擬合參數
 maxit = 500
 P=1#boson軌道
-Nbmax=2#boson的軌道最大佔據數
-bsize=(Nbmax+1)**P
+Nbmax=5 #boson的軌道最大佔據數
+bsize=(Nbmax+1)**P  #number of phonon
 NomF = Nmax
 omFs = (2*np.arange(NomF)+1)*np.pi*T   #Matsubara 頻率
-G0 = get_G0_semicirc(omFs, mu, t)
+G0 = get_G0_semicirc(omFs, mu, t)   #初始猜測G0
 no = 2*(1+Nb)    #impurity+bath
 print('no=',no)
 FH_list = build_fermion_op(no)
@@ -74,10 +74,10 @@ ebs = np.random.uniform(-1,1,Nb)
 Vrs = np.random.uniform(-0.5,0.5,Nb)
 Vis = np.zeros((Nb))
 x0 = np.hstack((Vrs,Vis,ebs))
-U = 1.0
+U = 0.5
 it = 0
-diff = 1e20
-w=0.2
+diff = 1e20 #容許誤差
+w=0.2#phonon震盪頻率
 for g in g_value:
     it = 0
     diff = 1e20
@@ -86,21 +86,21 @@ for g in g_value:
 
          # fit V eb
           args = omFs, 0.0, mu, G0, Nb, Nmax
-          result = minimize(cost_func,x0,args=args, method='L-BFGS-B', options={'gtol': 1e-2, 'eps': 1e-12})
+          result = minimize(cost_func,x0,args=args, method='L-BFGS-B', options={'gtol': 1e-2, 'eps': 1e-12}) #擬合(教授寫的)
           print("GA root convergence message---------------------------------")
           print("sucess=",result.success)
           print(result.message)
-          V = result.x[:Nb] + 1j*result.x[Nb:2*Nb]
-          eb = result.x[2*Nb:3*Nb]
+          V = result.x[:Nb] + 1j*result.x[Nb:2*Nb]      #初始猜V_l
+          eb = result.x[2*Nb:3*Nb]      #初始猜e_l
           x0 = result.x
           print('V=',V)
           print('eb=', eb)
     
-        # ED part
+        # ED part(算hamiltoian)
           h1 = np.array([[-U/2+mu, 0.0],
                    [ 0.0,-U/2+mu]])
           eb = np.kron(eb,np.ones((2)))
-          V = np.kron(V,np.eye(2)).T
+          V = np.kron(V,np.eye(2)).T        #建構個別矩陣
     
           V2E = np.zeros((2,2,2,2))
           V2E[1,1,0,0] = U
@@ -114,12 +114,12 @@ for g in g_value:
           print('trace(dm)=',np.trace(dm).real)
           print('docc=', docc.real)
     
-          GomF = compute_GomF_thermal(T, omFs, evals, evecs, FH_list_dense)
+          GomF = compute_GomF_thermal(T, omFs, evals, evecs, FH_list_dense) #Green function(thermal)
     
           # update G0
-          G0_new = 1./(1j*omFs + mu - t**2*GomF)
+          G0_new = 1./(1j*omFs + mu - t**2*GomF)    #Betthe lattice自恰關係 
           diff = np.sum(np.abs(G0_new  -G0))
-          print('diff=', diff)
+          print('diff=', diff) #算出誤差
           it += 1
           G0 = (1-mix)*G0 + mix*G0_new
     # real frequency quantities
@@ -139,14 +139,14 @@ for g in g_value:
     np.savetxt('Glattw_U%.2f_g%.2f.dat'%(U,g),np.vstack((ws,Glattw.real,Glattw.imag)).T)
     np.savetxt('Gimp_U%.2f_g%.2f.dat'%(U,g), np.vstack((omFs,GomF.real,GomF.imag)).T)
     np.savetxt('Glatt_U%.2f_g%.2f.dat'%(U,g), np.vstack((omFs,Glatt.real,Glatt.imag)).T)
-    np.savetxt('G0_U%.2f_g%2f.dat'%(U,g), np.vstack((omFs,G0.real,G0.imag)).T)
+    np.savetxt('G0_U%.2f_g%.2f.dat'%(U,g), np.vstack((omFs,G0.real,G0.imag)).T)
     np.savetxt('Sig_U%.2f._g%.2f.dat'%(U,g), np.vstack((omFs,Sig.real,Sig.imag)).T)
     np.savetxt('Sigw_U%.2f_g%.2f.dat'%(U,g), np.vstack((ws,Sigw.real,Sigw.imag)).T)
     np.savetxt('x0_U%.2f_g%.2f.dat'%(U,g), x0)
-    print(U, dm[0,0].real, dm[1,1].real, docc.real, Z, diff)
-    f = open('g_occ_docc_Z_diff_U=1.dat','a')
-    print(g, dm[0,0].real, dm[1,1].real, docc.real, Z, diff, file=f)
-    f.close()
+    print(U, dm[0,0].real, dm[1,1].real, docc.real, Z, diff) #改固g跑U的時候，檔名要顛倒
+    with open(f'g_occ_docc_Z_diff_U={U:%.2f}.dat','a') as f:
+        print(g, dm[0,0].real, dm[1,1].real, docc.real, Z, diff, file=f) #改固g跑U的時候，g要改成U
+    
 
 
 
@@ -189,7 +189,7 @@ for g in g_value:
 # from dos import *
 # from boson_op import*
 # w=0.2
-# data1= np.loadtxt('g_occ_docc_Z_diff_U=2.5.dat',skiprows=19, max_rows=15).T
+# data1= np.loadtxt('g_occ_docc_Z_diff_U=2.5.dat',skiprows=19, max_rows=15).T   #選資料的範圍
 # plt.plot((data1[0]**2)*2/w, data1[3], 'b-')
 # plt.xlabel('$\\lambda$', fontsize=15)
 # plt.ylabel(r'$\langle n_{\uparrow} n_{\downarrow} \rangle$', fontsize=15)
