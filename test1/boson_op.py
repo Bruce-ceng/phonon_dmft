@@ -3,7 +3,16 @@ from scipy.sparse import csr_matrix, identity
 from scipy.sparse.linalg import eigsh
 from itertools import product
 import itertools
-def build_boson_op_creation(P,Nb):   # P 為軌道數   Nb 為軌道最大佔據數
+def build_boson_op_creation(P,Nb):   # P 為波色子軌道數   Nb 為軌道最大佔據數
+    '''
+    Build bosonic operator for each spin+orbitals, alpha, with size 
+    of Hilberspace, A and B.
+    Input:
+          P:number of orbitals
+          Nb:the maximum occupancy number
+    Ouput:
+          AH_list: a list of bosonic operator <A|[f^dagger_alpha]|B>      
+    '''
 # 建立所有可能的佔據數組合
     states = list(itertools.product(range(Nb + 1), repeat=P))
 # 轉成 numpy 陣列
