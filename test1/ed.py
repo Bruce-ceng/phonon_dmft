@@ -86,20 +86,20 @@ def build_Hemb_matrix(h1, V, eb, V2E, FH_list):
     Vmat = csr_matrix((hsize,hsize), dtype=complex)
     Vconjmat = csr_matrix((hsize,hsize), dtype=complex)
     ebmat = csr_matrix((hsize,hsize), dtype=complex)
-    #build local one-body part
+    #build local one-body part  #impurity itself
     for i in range(ni):
         for j in range(ni):
             #print( i, j)
             Hemb += h1[i,j]*FH_list[i].dot( FH_list[j].getH() )
             H1mat+= h1[i,j]*FH_list[i].dot( FH_list[j].getH() )
-    #build hybridization part
+    #build hybridization part #impurity coupling with bath
     for i in range(ni):
         for j in range(nb):
             Hemb += V[j,i]*FH_list[i].dot( FH_list[ni+j].getH() )
             Hemb += V[j,i].conj()*FH_list[ni+j].dot( FH_list[i].getH() )
             Vmat += V[j,i]*FH_list[i].dot( FH_list[ni+j].getH() )
             Vconjmat += V[j,i].conj()*FH_list[ni+j].dot( FH_list[i].getH() )
-    #build bath part
+    #build bath part #bath energylevel
     for i in range(nb):
             Hemb += eb[i]*FH_list[ni+i].dot( FH_list[ni+i].getH() )
             ebmat += eb[i]*FH_list[ni+i].dot( FH_list[ni+i].getH() )
@@ -122,7 +122,7 @@ def build_Hemb_matrix(h1, V, eb, V2E, FH_list):
        
     return Hemb, U2loc
 
-def build_U2loc_matrix(V2E, eb, FH_list):
+def build_U2loc_matrix(V2E, eb, FH_list): #impurity itself(U)
     '''
     Build Hemb matrix.
     Input:
@@ -144,7 +144,21 @@ def build_U2loc_matrix(V2E, eb, FH_list):
                     U2loc += 0.5*V2E[i,j,k,l]*FH_list[i].dot( FH_list[k].dot( FH_list[l].getH().dot(FH_list[j].getH() ) ) )
 
     return U2loc
-def build_epcoupling(g, h1, eb, FH_list, AH_list, Nb, P):
+def build_epcoupling(g, h1, eb, FH_list, AH_list, Nb, P): 
+    '''
+    Build the electron-phonon coupling energy Hamiltonian and extend it to 
+    the full fermion ⊗ boson Hilbert space. (Kronecker product)
+    Input:
+        g: coupling strength
+        h1: local one-body matrix (determine fermion Hilbert size) 
+        eb: bath one-body matrix (determine fermion Hilbert size)
+        FH_list: fermion operator list
+        AH_list: bosonic operator list
+        Nb: maximum phonon occupation number
+        P: number of phonon modes
+    Return:
+        Hcoup: electron-phonon coupling Hamiltonian in full tensor-product space
+    '''
     no = h1.shape[0] + eb.shape[0]
     hsize = 2**no
     bsize = (Nb+1)**P
@@ -155,26 +169,39 @@ def build_epcoupling(g, h1, eb, FH_list, AH_list, Nb, P):
         down_idx = 2 * i + 1
         n_up   = FH_list[up_idx].dot(FH_list[up_idx].getH())
         n_down = FH_list[down_idx].dot(FH_list[down_idx].getH())
-        # 合成 (n_up + n_down - 1)
-        ni_op = n_up + n_down - I_fermion
-        # boson 位移算符 (a^†+a)
+        ni_op = n_up + n_down - I_fermion  # (n_up + n_down - 1)    #(n-1) from Holstein paper 
+        # bosonic displacement operator (b^†+b)
         b_op = AH_list[i] + AH_list[i].getH()
-        # tensor product 到全空間
-        Hcoup += g * kron(ni_op, b_op, format='csr')
+        # tensor product to all space
+        Hcoup += g * kron(ni_op, b_op, format='csr') #adding fermion space Kronecker identity
 
     return Hcoup
-def build_boson(w,h1,eb,AH_list,Nb,P):
-    no = h1.shape[0] + eb.shape[0]
-    hsize = 2**no
-    bsize=(Nb+1)**P
-    I_fermion= identity(hsize, format='csr')
-    Hb = csr_matrix((bsize,bsize), dtype=complex)
+def build_boson(w,h1,eb,AH_list,Nb,P):  #phonon energy level
+    '''
+    Build the bosonic energy Hamiltonian H_ph = w * Σ_i b_i^dagger b_i
+    and extend it to the full fermion ⊗ boson Hilbert space. (Kronecker product)
+    Input:
+        w: phonon frequency
+        h1: local one-body matrix (determine fermion Hilbert size)
+        eb: bath one-body matrix (determine fermion Hilbert size)
+        AH_list: bosonic operator list  
+        Nb: maximum phonon occupation number
+        P: number of phonon modes
+    Return:
+        H: bosonic Hamiltonian in full tensor-product space
+
+    '''
+    no = h1.shape[0] + eb.shape[0]  #calculate degree of freedom
+    hsize = 2**no   #fermonic Hilbert space size
+    bsize=(Nb+1)**P #boson Hilbert space size
+    I_fermion= identity(hsize, format='csr') #build fermion idendity matrix
+    Hb = csr_matrix((bsize,bsize), dtype=complex) #build bosonic energy Hamiltonian
     for i in range(P):
-        Hb+=AH_list[i].dot(AH_list[i].getH())
-    H=w*kron(I_fermion, Hb, format='csr') 
+        Hb+=AH_list[i].dot(AH_list[i].getH()) #(b_i^dagger)*(b_i)
+    H=w*kron(I_fermion, Hb, format='csr') #adding fermion space Kronecker identity
     return H 
 #FH_list_full = [kron(f_op, I_boson, format='csr') for f_op in FH_list]
-def calc_density_matrix_thermal(FH_list_full, T, evals, evecs):
+def calc_density_matrix_thermal(FH_list_full, T, evals, evecs): #
     '''
     calculate density matrix.
     Input:
@@ -212,17 +239,23 @@ def calc_double_occ_thermal(idx,FH_list_full, T, evals, evecs):
         FH_list: fermion operator list.
         vec: ground state eigenvector.
     Return:
-        double occupancy
+        docc: thermal double occupancy at orbital idx
     '''
-    exp_bE = np.diag(np.exp(-evals/T))
-    Z = np.trace(exp_bE)
-    return np.trace( evecs.dot(exp_bE).dot(evecs.conj().T).dot( ( FH_list_full[idx].dot( FH_list_full[idx].getH().dot( 
-             FH_list_full[idx+1].dot( FH_list_full[idx+1].getH() ) ) ) ).todense() ) )/Z
+    exp_bE = np.diag(np.exp(-evals/T)) #build Boltzmann weight
+    Z = np.trace(exp_bE) #calculate partition function
+    return np.trace( evecs.dot(exp_bE).dot(evecs.conj().T).dot( ( FH_list_full[idx].dot( FH_list_full[idx].getH().dot(  #n_up
+             FH_list_full[idx+1].dot( FH_list_full[idx+1].getH() ) ) ) ).todense() ) )/Z  #n_down
+    # evces.dot(exp_bE).dot(evces.conj().T) ---build density metrix 
+    #FH[idx] · FH[idx].getH()      →   n_up
+    #FH[idx+1] · FH[idx+1].getH()  →   n_down
+    #return np.trace( ρ . n_up . n_dn ) / Z   → finite-temperature double occupancy
 
+                                        
 def solve_Hemb_thermal(T, h1, V, eb, V2E, FH_list,Nb,P,AH_list,g,w,FH_list_full,verbose=0):
     '''
     solve embeding impurity Hamiltonian.
     Input:
+        T: temperature
         V: hybridization matrix
         h1: local one-body matrix
         eb: bath one-body 
@@ -230,20 +263,21 @@ def solve_Hemb_thermal(T, h1, V, eb, V2E, FH_list,Nb,P,AH_list,g,w,FH_list_full,
         FH_list: fermion operator list
         verbose: printing message
     Return:
-        density matrix
-        evals
-        evecs
+        dm: density matrix
+        docc: double occupancy 〈n↑ n↓〉 at temperature T
+        evals: eigenvalues of Hamiltonain
+        evecs: eigenvector matrix U
     '''
     no = h1.shape[0] + eb.shape[0]
     hsize = 2**no
     bsize=(Nb+1)**P
-    I_boson = identity(bsize, format='csr')
+    I_boson = identity(bsize, format='csr') #build boson idendity matrix
     Hemb, U2loc = build_Hemb_matrix(h1, V, eb, V2E, FH_list)
     Hboson=build_boson(w,h1,eb,AH_list,Nb,P)
     Hcoup=build_epcoupling(g,h1,eb,FH_list,AH_list,Nb,P)
-    Hemb=kron(Hemb,I_boson , format='csr')
+    Hemb=kron(Hemb,I_boson , format='csr') #extend in full tensor-product space
     Htot_dense = (Hemb+Hboson+Hcoup).todense()
-    # using scipy.linalg.eigh
+    # using scipy.linalg.eigh (module calculating eigenvator and eigenvalue)
     from scipy.linalg import eigh
     evals, evecs = eigh(Htot_dense)
     e0 = evals[0]
@@ -258,7 +292,18 @@ def solve_Hemb_thermal(T, h1, V, eb, V2E, FH_list,Nb,P,AH_list,g,w,FH_list_full,
 
     return dm, evals, evecs, docc
 
-def operators_to_eigenbasis(op_vec, U):    #occupation basis轉換成eigenbasis
+def operators_to_eigenbasis(op_vec, U):     #transform occupation basis(Fock basis) into eigenbasis
+    '''
+    Transform a set of operators from occupation (Fock) basis into the eigenbasis
+    definede by eigenvector matrix U
+    Input:
+        op_vec: list of operators im the Fock basis
+        U: eigenvector matrix obtained from diagonalizing the Hamiltonian
+    Return:
+         dop_vec: list of operators transformed into the eigenbasis,
+                each computed as U^\dagger * op * U
+            
+    '''
     dop_vec = []
     for op in op_vec:
         dop =np.asmatrix(U).H * op * np.asmatrix(U)
@@ -266,27 +311,53 @@ def operators_to_eigenbasis(op_vec, U):    #occupation basis轉換成eigenbasis
 
     return dop_vec
 
-def compute_GomF_thermal(T, omFs, evals, evecs, FH_list_dense):
-    # -- Components of the Lehman expression
-    dE = - evals[:, None] + evals[None, :]    # ΔE = E_m(行向量) - E_n(列向量)
-    exp_bE = np.exp(- evals/T)
-    M = exp_bE[:, None] + exp_bE[None, :]
+def compute_GomF_thermal(T, omFs, evals, evecs, FH_list_dense): 
+    '''
+    Compute the Green function for finite temperature in Mastubara axis
+    Using the Lehmann representation
+    Input:
+        T: temperature
+        omFs: Matsubara frequency
+        evals: eigenvalues of Hamiltonian
+        evcs: eigenvector matrix U
+        FH_list_dense: fermion operator list in Fock basis
+    Return:
+        Gw:Green function G(iω_n) evaluated at all Matsubara frequencies
 
-    inv_freq = 1j*omFs[:, None, None] - dE[None, :, :]
+    '''
+    # -- Components of the Lehmann expression
+    dE = - evals[:, None] + evals[None, :]    # ΔE = E_m(column vector) - E_n(row vector)
+    exp_bE = np.exp(- evals/T)
+    M = exp_bE[:, None] + exp_bE[None, :]  #exp(-(Beta)E_m)+exp^(-(Beta)E_n)
+
+    inv_freq = 1j*omFs[:, None, None] - dE[None, :, :]  #i(w_n)+E_m-E_n
     nonzero_idx = np.nonzero(inv_freq)
     # -- Only eval for non-zero values
-    freq = np.zeros_like(inv_freq)
-    freq[nonzero_idx] = inv_freq[nonzero_idx]**(-1)
+    freq = np.zeros_like(inv_freq) #avoid not to be zero
+    freq[nonzero_idx] = inv_freq[nonzero_idx]**(-1) #1/[i(w_n)+E_m-E_n]
+    #transform operators into eigenbasis (op1_eig is c^dagger /op2_eig is c)
+    op1_eig, op2_eig = operators_to_eigenbasis([FH_list_dense[0].conj().T, FH_list_dense[0]], evecs) 
+    
 
-    op1_eig, op2_eig = operators_to_eigenbasis([FH_list_dense[0].conj().T, FH_list_dense[0]], evecs)
-
-    # -- Compute Lehman sum for all operator combinations
+    # -- Compute Lehmann sum for all operator combinations
     Gw = np.zeros((len(omFs)), dtype=complex)
     Gw = np.einsum('nm,mn,nm,znm->z', op1_eig, op2_eig, M, freq)
     Gw /= np.sum(exp_bE)
     return Gw
 
-def compute_Gw_thermal(T, oms, eta, evals, evecs, FH_list_dense):
+def compute_Gw_thermal(T, oms, eta, evals, evecs, FH_list_dense): 
+    '''
+    Compute the real-frequency retarded Green function using the Lehmann representation
+    Input:
+        T: temperature
+        oms: real frequency grid
+        evals: eigenvalues of the Hamiltonian
+        evcs: eigenvector matrix
+        FH_list_dense: fermion operator list in Fock basis
+    Return:
+        Gw: retarded Green function G^R(w) evaluated on the frequency grid oms
+    
+    '''
     # -- Components of the Lehman expression
     dE = - evals[:, None] + evals[None, :]
     exp_bE = np.exp(- evals/T)
@@ -300,7 +371,7 @@ def compute_Gw_thermal(T, oms, eta, evals, evecs, FH_list_dense):
 
     op1_eig, op2_eig = operators_to_eigenbasis([FH_list_dense[0].conj().T, FH_list_dense[0]], evecs)
 
-    # -- Compute Lehman sum for all operator combinations
+    # -- Compute Lehmann sum for all operator combinations
     Gw = np.zeros((len(oms)), dtype=complex)
     Gw = np.einsum('nm,mn,nm,znm->z', op1_eig, op2_eig, M, freq)
     Gw /= np.sum(exp_bE)
@@ -400,7 +471,7 @@ if __name__ == "__main__":
     V = np.kron(V,np.eye(2))
     #
     V2E = np.zeros((2,2,2,2))
-    V2E[0,0,1,1] = U
+    V2E[0,0,1,1] = U #建構庫倫力U的矩陣
     V2E[1,1,0,0] = U
 
     no = h1.shape[0] + eb.shape[0]
