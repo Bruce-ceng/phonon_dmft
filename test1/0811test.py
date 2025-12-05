@@ -10,25 +10,64 @@ warnings.filterwarnings("ignore")
 
 # ---------- 函數區 ----------
 def get_G0_semicirc(omFs, mu, t):
+    '''
+    Compute the non-interacting Green's function G0(iω_n) for a lattice
+    with a semicircular density of states (Bethe lattice) using numerical
+    integration over energy.
+    Input:
+        omfs: the Matsubara frequency
+        mu: chemical potential
+        t: hopping amplitude
+    Return:
+        Go: the initial non-interacting Green function     
+    '''
     from dos import semicircle
-    ws = np.linspace(-2*t, 2*t, 1000)
-    sc_dos = semicircle(ws, t)
+    ws = np.linspace(-2*t, 2*t, 1000) #1000 energy point from -2t~2t
+    sc_dos = semicircle(ws, t) #semicicle DOS
     G0 = np.zeros(len(omFs), dtype=complex)
     for iomF, omF in enumerate(omFs):
         y = sc_dos / (1j * omF + mu - ws)
-        G0[iomF] = simpson(y, ws)
+        G0[iomF] = simpson(y, ws) #Using Simpson integration method to do energy integral
     return G0
 
 def get_G0_aim(omFs, V, eb, ed, mu):
-    G0_aim = np.zeros(len(omFs), dtype=complex)
+    '''
+    Compute the initial non-interacting impurity Green's function G0(iω_n)
+    for the Anderson Impurity Model 
+    Input:
+        omFs: the Matsubara frequencies
+        V: hybridization amplitudes V_b between impurity and bath levels
+        eb: bath-site energies ε_l
+        ed: impurity on-site energy ε_d
+        mu: chemical energy
+    Return:
+        G0_aim: the non-interacting impurity Green's function evaluated
+        at the given Matsubara frequencies    
+    '''
+    G0_aim = np.zeros(len(omFs), dtype=complex) #initialize
     for iomF, omF in enumerate(omFs):
         Delta = 0.0
         for ib in range(eb.shape[0]):
-            Delta += (V[ib] * np.conj(V[ib])).real / (1j * omF - eb[ib])
+            Delta += (V[ib] * np.conj(V[ib])).real / (1j * omF - eb[ib]) #Calculate hybridization function
         G0_aim[iomF] = 1. / (1j * omF - ed + mu - Delta)
     return G0_aim
 
-def get_G0w_aim(ws, eta, V, eb, ed, mu):  #no U interaction(實頻)
+def get_G0w_aim(ws, eta, V, eb, ed, mu):  
+    '''
+    Compute the initial non-interacting impurity Green's function G0(iω_n) at Matsubara axis
+    for the Anderson Impurity Model
+    Input:
+        ws: real frequency grid
+        eta: small imaginary part to ensure a smooth spectrum
+        V: hybridization amplitudes V_b between impurity and bath levels
+        eb: bath-site energies ε_l
+        ed: impurity on-site energy ε_d
+        mu: chemical energy
+    Retrun:
+        Go_aim: the non-interacting impurity Green's function evaluated
+        at the given real frequencies
+
+    '''
     G0_aim = np.zeros((len(ws)), dtype=complex)
     for iw, w in enumerate(ws):
         Delta = 0.0
@@ -38,6 +77,18 @@ def get_G0w_aim(ws, eta, V, eb, ed, mu):  #no U interaction(實頻)
     return G0_aim
 
 def cost_func(x, *args):    #擬合算最小值
+    '''
+    Compute the cost function used to fit the Anderson Impurity Model
+    bath parameters (V_b, ε_b) by comparing the AIM Weiss Green's function G0_aim(iω_n)
+    to the target Weiss field G0(iω_n).
+    Input:
+        x: optimization vector containing real and imaginary parts of V_b
+           and bath energies ε_l
+    Return:
+        cost:  weighted sum of squared differences between
+           G0_aim^{-1}(iω_n) and G0^{-1}(iω_n),
+           emphasizing accuracy at low Matsubara frequencies
+    '''
     omFs, ed, mu, G0, Nb, Nmax = args
     V = x[:Nb] + 1j * x[Nb:2*Nb]
     eb = x[2*Nb:3*Nb]
@@ -47,56 +98,58 @@ def cost_func(x, *args):    #擬合算最小值
         diff = 1. / G0_aim[iomF] - 1. / G0[iomF]
         cost += (np.conj(diff) * diff).real / omFs[iomF]**1
     return cost
-g_value = np.arange(0.0, 1.1, 0.02)[::-1]#界定g的範圍、間隔
+g_value = np.arange(0.0, 1.1, 0.02)[::-1] #界定g的範圍、間隔
 # initial density of state
-T = 0.005
-t = 0.5
-mu = 0.0
+T = 0.005 #temperature
+t = 0.5 #hopping amplitude
+mu = 0.0 #chemical potential
 Nb = 3  #bath軌道
 Nmax = 100
 mix = 0.2 #調0.1比較好收斂 #擬合參數
-maxit = 500
-P=1#boson軌道
-Nbmax=5 #boson的軌道最大佔據數
+maxit = 500 #the maximum iterate
+P=1 #boson orbital
+Nbmax=5 #the maximum occupancy of bosonic orbital
 bsize=(Nbmax+1)**P  #number of phonon
 NomF = Nmax
 omFs = (2*np.arange(NomF)+1)*np.pi*T   #Matsubara 頻率
 G0 = get_G0_semicirc(omFs, mu, t)   #初始猜測G0
 no = 2*(1+Nb)    #impurity+bath
 print('no=',no)
-FH_list = build_fermion_op(no)
+FH_list = build_fermion_op(no) 
 AH_list= build_boson_op_creation(P,Nbmax)
 print(len(FH_list))
 I_boson = identity(bsize, format='csr')
 FH_list_full = [kron(f_op, I_boson, format='csr') for f_op in FH_list]
 FH_list_dense = [np.array(FH.todense(),dtype=complex) for FH in FH_list_full]
-ebs = np.random.uniform(-1,1,Nb)
-Vrs = np.random.uniform(-0.5,0.5,Nb)
-Vis = np.zeros((Nb))
-x0 = np.hstack((Vrs,Vis,ebs))
-U = 0.5
-it = 0
+ebs = np.random.uniform(-1,1,Nb)  #produce random bath energies ε_l
+Vrs = np.random.uniform(-0.5,0.5,Nb) #produce random hybridization amplitudes V for real part
+Vis = np.zeros((Nb))  #produce random hybridization amplitudes V for imaginary part
+x0 = np.hstack((Vrs,Vis,ebs))  #Combine Vrs,Vis and ε_l into a single long vector
+U = 0.5 # Coulomb interaction (ajustable)
+it = 0 #the initial iterate 
 diff = 1e20 #容許誤差
-w=0.2#phonon震盪頻率
+w=0.2 #phonon震盪頻率
+
+#Scaning g to run the DMFT self-consistency loop until G0 close enough (diff < 5e-5)
 for g in g_value:
     it = 0
     diff = 1e20
     while diff > 5e-5 and it<maxit:
           print("-------------------------------------- it=%d U=%.2f g=%.2f--------------------------------------"%(it, U, g))
 
-         # fit V eb
+         # fitting V eb by using 'optimize.minimize' to make G0_aim approach G0 
           args = omFs, 0.0, mu, G0, Nb, Nmax
           result = minimize(cost_func,x0,args=args, method='L-BFGS-B', options={'gtol': 1e-2, 'eps': 1e-12}) #擬合(教授寫的)
           print("GA root convergence message---------------------------------")
           print("sucess=",result.success)
           print(result.message)
-          V = result.x[:Nb] + 1j*result.x[Nb:2*Nb]      #初始猜V_l
-          eb = result.x[2*Nb:3*Nb]      #初始猜e_l
+          V = result.x[:Nb] + 1j*result.x[Nb:2*Nb]      #new V
+          eb = result.x[2*Nb:3*Nb]      #new ε_l
           x0 = result.x
           print('V=',V)
           print('eb=', eb)
     
-        # ED part(算hamiltoian)
+        # Build Hamiltonian : H_imp + bath +interaction
           h1 = np.array([[-U/2+mu, 0.0],
                    [ 0.0,-U/2+mu]])
           eb = np.kron(eb,np.ones((2)))
@@ -107,7 +160,7 @@ for g in g_value:
           V2E[0,0,1,1] = U
           print('V(ED)=',V)
           print('eb(ED)=', eb)
-
+        # Solve Hamiltonian using ED to get G0_aim
           dm, evals, evecs, docc =solve_Hemb_thermal(T, h1, V, eb, V2E, FH_list,Nbmax,P,AH_list,g,w,FH_list_full,verbose=0)
           print('dm=')
           print(dm.real)
@@ -116,12 +169,12 @@ for g in g_value:
     
           GomF = compute_GomF_thermal(T, omFs, evals, evecs, FH_list_dense) #Green function(thermal)
     
-          # update G0
+        # update G0
           G0_new = 1./(1j*omFs + mu - t**2*GomF)    #Betthe lattice自恰關係 
           diff = np.sum(np.abs(G0_new  -G0))
           print('diff=', diff) #算出誤差
           it += 1
-          G0 = (1-mix)*G0 + mix*G0_new
+          G0 = (1-mix)*G0 + mix*G0_new #linear mixing
     # real frequency quantities
     ws = np.linspace(-5,5,200) # frequency mesh
     eta = 0.1 #broadening factor
@@ -134,7 +187,10 @@ for g in g_value:
     Sig = 1./G0 - 1./GomF # Matsubara frequency self-energy
     Z = 1./(1-(Sig[0].imag)/(omFs[0])) # quasiparticle weight estimate from Matsubara self-energy
     Glatt = compute_GlattomF_semcircle(omFs,Sig,mu) # real frequency lattice Green's function
-
+    import os
+    outdir = f"U0.5/U{U:.2f}" #U is adjustable
+    os.makedirs(outdir, exist_ok=True)
+    print(f"[DEBUG]存檔前 U={U:.2f},g={g:.2f}")
     np.savetxt('Gimpw_U%.2f_g%.2f.dat'%(U,g),np.vstack((ws,Gw.real,Gw.imag)).T)
     np.savetxt('Glattw_U%.2f_g%.2f.dat'%(U,g),np.vstack((ws,Glattw.real,Glattw.imag)).T)
     np.savetxt('Gimp_U%.2f_g%.2f.dat'%(U,g), np.vstack((omFs,GomF.real,GomF.imag)).T)
@@ -144,7 +200,7 @@ for g in g_value:
     np.savetxt('Sigw_U%.2f_g%.2f.dat'%(U,g), np.vstack((ws,Sigw.real,Sigw.imag)).T)
     np.savetxt('x0_U%.2f_g%.2f.dat'%(U,g), x0)
     print(U, dm[0,0].real, dm[1,1].real, docc.real, Z, diff) #改固g跑U的時候，檔名要顛倒
-    with open(f'g_occ_docc_Z_diff_U={U:%.2f}.dat','a') as f:
+    with open(f'{outdir}/g_occ_docc_Z_diff_U={U:.2f}.dat','a') as f:
         print(g, dm[0,0].real, dm[1,1].real, docc.real, Z, diff, file=f) #改固g跑U的時候，g要改成U
     
 
