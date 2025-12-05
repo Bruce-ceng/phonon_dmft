@@ -413,11 +413,21 @@ def compute_GomF(omFs, evals, evecs, FH_list_dense, deg):#gs_idx=[0]):
     return Gw
 
 def compute_GlattomF_semcircle(omFs,Sig,mu):
+    '''
+    Compute the local Green function G_loc(iw_n) for a lattice with a
+    Semicircular density of state using numerical energy integration
+    Input:
+        omFs: the Matsubara frequency
+        Sig: Self-energy correesponding to the Matsubara frequency
+        mu: chemical potential
+    Return: 
+        Glattw: the local Green function on Matsubara axis  
+    '''
     Glattw = np.zeros((len(omFs)),dtype=np.complex128)
-    t = 0.5 # half-bandwidth set to 1
-    es = np.linspace(-2*t,2*t,2000)
-    de = es[1] - es[0]
-    dose = semicircle(es,t)
+    t = 0.5 # half-bandwidth set to 1 #hopping
+    es = np.linspace(-2*t,2*t,2000) #energy
+    de = es[1] - es[0]  
+    dose = semicircle(es,t) #semicircle DOS
     for iw in range(len(omFs)):
         tmp = 0j
         for ie, e in enumerate(es):
@@ -426,6 +436,17 @@ def compute_GlattomF_semcircle(omFs,Sig,mu):
     return Glattw
 
 def compute_Glattw_semcircle(oms,eta,Sig,mu):
+    '''
+    Compute the local Green function G_loc(w+iη) for a lattice with a
+    Semicircular density of state using numerical energy integration
+    Input:
+        oms: the real frequency
+        eta: small imaginary part
+        Sig: Self-energy correesponding to the real frequency
+        mu: chemical potential
+    Return:
+        Glattw: the local Green function on real axis
+    '''
     Glattw = np.zeros((len(oms)),dtype=np.complex128)
     t = 0.5 # half-bandwidth set to 1
     es = np.linspace(-2*t,2*t,2000)
